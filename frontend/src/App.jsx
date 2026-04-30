@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import TimetableGrid from './components/TimetableGrid';
 import GroupView from './components/GroupView';
-import { NUSMODS_MODULE_DATA, CURRENT_USER_ID } from './data/dummyData';
+import { NUSMODS_MODULE_DATA } from './data/dummyData';
+import LoginScreen from './LoginScreen';
 import './App.css';
 
 export default function App() {
   const [nusmodsData] = useState(NUSMODS_MODULE_DATA);
+  const [currentUserId, setCurrentUserId] = useState(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    const stored = window.localStorage.getItem('currentUserId');
+    return stored ? Number(stored) : null;
+  });
   const [moduleSelections, setModuleSelections] = useState([]);
   const [customEvents, setCustomEvents] = useState([]);
   const [mergedSlots, setMergedSlots] = useState([]);
@@ -78,10 +87,19 @@ export default function App() {
 
   // Load initial data on mount
   useEffect(() => {
+    if (!currentUserId) {
+      setModuleSelections([]);
+      setCustomEvents([]);
+      setMergedSlots([]);
+      setLoading(false);
+      return;
+    }
+
     const loadData = async () => {
+      setLoading(true);
       try {
         // Fetch user's timetable from backend
-        const response = await fetch('/timetable');
+        const response = await fetch(`/timetable?userId=${currentUserId}`);
         if (!response.ok) throw new Error('Failed to fetch timetable');
 
         const data = await response.json();
@@ -110,6 +128,24 @@ export default function App() {
         // Merge slots
         const merged = mergeSlots(normalizedSelections, normalizedEvents, nusmodsData);
         setMergedSlots(merged);
+
+        const needsSync =
+          JSON.stringify(normalizedSelections) !== JSON.stringify(fetchedSelections) ||
+          JSON.stringify(normalizedEvents) !== JSON.stringify(fetchedEvents);
+
+        if (needsSync) {
+          await fetch(`/timetable/update?userId=${currentUserId}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              userId: currentUserId,
+              moduleSelections: normalizedSelections,
+              customEvents: normalizedEvents
+            })
+          });
+        }
       } catch (error) {
         console.error('Error loading timetable:', error);
         // Fall back to dummy data on error
@@ -135,13 +171,33 @@ export default function App() {
     };
 
     loadData();
-  }, [nusmodsData]);
+  }, [currentUserId, nusmodsData]);
 
   // Re-merge slots whenever selections or events change
   useEffect(() => {
     const merged = mergeSlots(moduleSelections, customEvents, nusmodsData);
     setMergedSlots(merged);
   }, [moduleSelections, customEvents, nusmodsData]);
+
+  const handleLogin = (userId) => {
+    window.localStorage.setItem('currentUserId', String(userId));
+    setCurrentUserId(userId);
+    setView('personal');
+  };
+
+  const handleSwitchUser = () => {
+    window.localStorage.removeItem('currentUserId');
+    setCurrentUserId(null);
+    setModuleSelections([]);
+    setCustomEvents([]);
+    setMergedSlots([]);
+    setView('personal');
+    setLoading(false);
+  };
+
+  if (!currentUserId) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
 
   if (loading) {
     return <div className="app-loading">Loading timetable data...</div>;
@@ -151,8 +207,13 @@ export default function App() {
     <div className="app-container">
       <header className="app-header">
         <div className="header-content">
-          <h1>NUS Timetable Coordinator</h1>
-          <p>View and manage your schedule</p>
+          <div>
+            <h1>NUS Timetable Coordinator</h1>
+            <p>View and manage your schedule</p>
+          </div>
+          <button className="switch-user-button" type="button" onClick={handleSwitchUser}>
+            Switch User
+          </button>
         </div>
         <nav className="nav-tabs">
           <button
