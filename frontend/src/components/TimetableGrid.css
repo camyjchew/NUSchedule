@@ -1,0 +1,80 @@
+.timetable-grid-container {
+  display: flex;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow-x: auto;
+  height: 600px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.time-column {
+  display: flex;
+  flex-direction: column;
+  width: 60px;
+  min-width: 60px;
+  border-right: 1px solid #e5e7eb;
+  background: #f3f4f6;
+}
+
+.time-slot {
+  display: flex;
+  align-items: flex-start;
+  padding-top: 4px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.time-label {
+  font-size: 11px;
+  color: #6b7280;
+  text-align: center;
+  width: 100%;
+}
+
+.day-column {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #e5e7eb;
+}
+
+.day-header {
+  padding: 8px;
+  font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  text-align: center;
+  font-size: 13px;
+  color: #374151;
+}
+
+.day-content {
+  flex: 1;
+  position: relative;
+  background: white;
+  display: flex;
+  flex-direction: column;
+}
+
+.hour-slot {
+  flex: 1;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.slots-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.slots-container > * {
+  pointer-events: auto;
+}
+
+.day-column:last-child {
+  border-right: none;
+}

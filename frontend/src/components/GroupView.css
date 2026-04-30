@@ -1,0 +1,51 @@
+.group-view-container {
+  width: 100%;
+}
+
+.group-view-container h2 {
+  margin-bottom: 20px;
+  color: #1f2937;
+  font-size: 24px;
+}
+
+.group-controls {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.member-toggles {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.member-toggle {
+  padding: 8px 14px;
+  border: 2px solid #d1d5db;
+  background: white;
+  color: #374151;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.member-toggle:hover {
+  border-color: #9ca3af;
+  background: #f9fafb;
+}
+
+.member-toggle.active {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+.member-count {
+  font-size: 12px;
+  color: #6b7280;
+}

@@ -1,0 +1,12 @@
+.slot-block {
+  position: absolute;
+  left: 0;
+  right: 0;
+  margin: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.slot-block:hover {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}
