@@ -1,0 +1,97 @@
+.overlay-grid-shell {
+  position: relative;
+  overflow: auto;
+  border: 1px solid #dbe4f0;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+}
+
+.overlay-grid-header,
+.overlay-grid-body {
+  display: grid;
+  grid-template-columns: 64px repeat(5, minmax(150px, 1fr));
+}
+
+.overlay-grid-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc;
+  border-bottom: 1px solid #dbe4f0;
+}
+
+.overlay-grid-corner,
+.overlay-grid-day-header,
+.overlay-grid-time-label,
+.overlay-grid-cell {
+  min-height: 22px;
+  border-right: 1px solid #edf2f7;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.overlay-grid-day-header,
+.overlay-grid-time-label,
+.overlay-grid-corner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.overlay-grid-time-label {
+  background: #f8fafc;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.overlay-grid-cell {
+  transition: filter 0.12s ease, transform 0.12s ease;
+}
+
+.overlay-grid-cell:hover {
+  filter: brightness(0.97);
+  transform: scale(0.995);
+}
+
+.overlay-tooltip {
+  position: fixed;
+  z-index: 20;
+  width: min(280px, calc(100vw - 24px));
+  padding: 14px 14px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.96);
+  color: #f8fafc;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.28);
+  pointer-events: none;
+}
+
+.overlay-tooltip-time {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.overlay-tooltip-divider {
+  height: 1px;
+  margin: 10px 0;
+  background: rgba(148, 163, 184, 0.28);
+}
+
+.overlay-tooltip-list {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.overlay-tooltip-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.overlay-tooltip-dot {
+  flex: 0 0 auto;
+}
