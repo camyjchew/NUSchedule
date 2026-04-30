@@ -6,9 +6,9 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/timetable': 'http://localhost:5000',
-      '/group': 'http://localhost:5000',
-      '/health': 'http://localhost:5000'
+      '/timetable': 'http://localhost:5001',
+      '/group': 'http://localhost:5001',
+      '/health': 'http://localhost:5001'
     }
   }
 })
