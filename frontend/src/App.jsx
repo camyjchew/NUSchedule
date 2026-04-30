@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import TimetableGrid from './components/TimetableGrid';
 import GroupView from './components/GroupView';
-import { NUSMODS_MODULE_DATA, CURRENT_USER_ID } from './data/dummyData';
+import { NUSMODS_MODULE_DATA } from './data/dummyData';
+import LoginScreen from './LoginScreen';
 import './App.css';
 
 export default function App() {
   const [nusmodsData] = useState(NUSMODS_MODULE_DATA);
+  const [currentUserId, setCurrentUserId] = useState(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    const stored = window.localStorage.getItem('currentUserId');
+    return stored ? Number(stored) : null;
+  });
   const [moduleSelections, setModuleSelections] = useState([]);
   const [customEvents, setCustomEvents] = useState([]);
   const [mergedSlots, setMergedSlots] = useState([]);
@@ -76,12 +85,194 @@ export default function App() {
     return slots;
   };
 
+  const formatTimeForInput = (time) => {
+    if (!time || time.length !== 4) {
+      return '';
+    }
+
+    return `${time.slice(0, 2)}:${time.slice(2, 4)}`;
+  };
+
+  const dayOrder = {
+    Monday: 0,
+    Tuesday: 1,
+    Wednesday: 2,
+    Thursday: 3,
+    Friday: 4
+  };
+
+  const timeToMinutes = (time) => {
+    if (!time || time.length !== 4) {
+      return 0;
+    }
+
+    const hours = Number(time.slice(0, 2));
+    const minutes = Number(time.slice(2, 4));
+    return hours * 60 + minutes;
+  };
+
+  const minutesToTime = (minutes) => {
+    const safeMinutes = Math.max(0, Math.min(24 * 60 - 1, minutes));
+    const hours = Math.floor(safeMinutes / 60)
+      .toString()
+      .padStart(2, '0');
+    const mins = Math.round(safeMinutes % 60)
+      .toString()
+      .padStart(2, '0');
+    return `${hours}${mins}`;
+  };
+
+  const sortCustomEvents = (events) => {
+    return [...events].sort((left, right) => {
+      const dayDiff = (dayOrder[left.day] ?? 99) - (dayOrder[right.day] ?? 99);
+      if (dayDiff !== 0) {
+        return dayDiff;
+      }
+
+      return timeToMinutes(left.startTime) - timeToMinutes(right.startTime);
+    });
+  };
+
+  const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+  const updateCustomEvent = async (eventId, updates, options = {}) => {
+    const { persist = false } = options;
+    const previousEvents = customEventsRef.current;
+    const nextEvents = sortCustomEvents(
+      previousEvents.map((event) => (event.id === eventId ? { ...event, ...updates } : event))
+    );
+
+    customEventsRef.current = nextEvents;
+    setCustomEvents(nextEvents);
+
+    if (!persist) {
+      return;
+    }
+
+    try {
+      await saveTimetable(moduleSelectionsRef.current, nextEvents);
+      setCustomEventFeedback('Custom event updated.');
+    } catch (error) {
+      console.error('Error updating custom event:', error);
+      customEventsRef.current = previousEvents;
+      setCustomEvents(previousEvents);
+      setCustomEventFeedback('Could not save the event update. Please try again.');
+    }
+  };
+
+  const editCustomEventTitle = async (eventId, title) => {
+    await updateCustomEvent(eventId, { title: title.trim() }, { persist: true });
+  };
+
+  const saveTimetable = async (nextSelections, nextEvents) => {
+    const response = await fetch(`/timetable/update?userId=${currentUserId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        userId: currentUserId,
+        moduleSelections: nextSelections,
+        customEvents: nextEvents
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to save timetable');
+    }
+  };
+
+  const updateCustomEventDraft = (field, value) => {
+    setCustomEventDraft((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
+
+  const handleAddCustomEvent = async (event) => {
+    event.preventDefault();
+
+    const title = customEventDraft.title.trim();
+    if (!title) {
+      setCustomEventFeedback('Add a title before saving the event.');
+      return;
+    }
+
+    if (Number(customEventDraft.endTime) <= Number(customEventDraft.startTime)) {
+      setCustomEventFeedback('End time must be later than start time.');
+      return;
+    }
+
+    const newEvent = {
+      id: window.crypto?.randomUUID?.() || `custom-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      title,
+      day: customEventDraft.day,
+      startTime: customEventDraft.startTime,
+      endTime: customEventDraft.endTime,
+      color: customEventDraft.color
+    };
+
+    const nextEvents = sortCustomEvents([...customEventsRef.current, newEvent]);
+    setSavingCustomEvent(true);
+    setCustomEventFeedback('');
+    customEventsRef.current = nextEvents;
+    setCustomEvents(nextEvents);
+
+    try {
+      await saveTimetable(moduleSelectionsRef.current, nextEvents);
+      setCustomEventDraft((current) => ({
+        ...current,
+        title: '',
+        startTime: '0900',
+        endTime: '1000'
+      }));
+      setCustomEventFeedback('Custom event saved.');
+    } catch (error) {
+      console.error('Error saving custom event:', error);
+      customEventsRef.current = sortCustomEvents(customEventsRef.current.filter((item) => item.id !== newEvent.id));
+      setCustomEvents(customEventsRef.current);
+      setCustomEventFeedback('Could not save the event. Please try again.');
+    } finally {
+      setSavingCustomEvent(false);
+    }
+  };
+
+  const handleDeleteCustomEvent = async (eventId) => {
+    const previousEvents = customEventsRef.current;
+    const nextEvents = previousEvents.filter((item) => item.id !== eventId);
+    setSavingCustomEvent(true);
+    setCustomEventFeedback('');
+    customEventsRef.current = nextEvents;
+    setCustomEvents(nextEvents);
+
+    try {
+      await saveTimetable(moduleSelectionsRef.current, nextEvents);
+      setCustomEventFeedback('Custom event deleted.');
+    } catch (error) {
+      console.error('Error deleting custom event:', error);
+      customEventsRef.current = previousEvents;
+      setCustomEvents(previousEvents);
+      setCustomEventFeedback('Could not delete the event. Please try again.');
+    } finally {
+      setSavingCustomEvent(false);
+    }
+  };
+
   // Load initial data on mount
   useEffect(() => {
+    if (!currentUserId) {
+      setModuleSelections([]);
+      setCustomEvents([]);
+      setMergedSlots([]);
+      setLoading(false);
+      return;
+    }
+
     const loadData = async () => {
+      setLoading(true);
       try {
         // Fetch user's timetable from backend
-        const response = await fetch('/timetable');
+        const response = await fetch(`/timetable?userId=${currentUserId}`);
         if (!response.ok) throw new Error('Failed to fetch timetable');
 
         const data = await response.json();
@@ -110,6 +301,24 @@ export default function App() {
         // Merge slots
         const merged = mergeSlots(normalizedSelections, normalizedEvents, nusmodsData);
         setMergedSlots(merged);
+
+        const needsSync =
+          JSON.stringify(normalizedSelections) !== JSON.stringify(fetchedSelections) ||
+          JSON.stringify(normalizedEvents) !== JSON.stringify(fetchedEvents);
+
+        if (needsSync) {
+          await fetch(`/timetable/update?userId=${currentUserId}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              userId: currentUserId,
+              moduleSelections: normalizedSelections,
+              customEvents: normalizedEvents
+            })
+          });
+        }
       } catch (error) {
         console.error('Error loading timetable:', error);
         // Fall back to dummy data on error
@@ -135,13 +344,33 @@ export default function App() {
     };
 
     loadData();
-  }, [nusmodsData]);
+  }, [currentUserId, nusmodsData]);
 
   // Re-merge slots whenever selections or events change
   useEffect(() => {
     const merged = mergeSlots(moduleSelections, customEvents, nusmodsData);
     setMergedSlots(merged);
   }, [moduleSelections, customEvents, nusmodsData]);
+
+  const handleLogin = (userId) => {
+    window.localStorage.setItem('currentUserId', String(userId));
+    setCurrentUserId(userId);
+    setView('personal');
+  };
+
+  const handleSwitchUser = () => {
+    window.localStorage.removeItem('currentUserId');
+    setCurrentUserId(null);
+    setModuleSelections([]);
+    setCustomEvents([]);
+    setMergedSlots([]);
+    setView('personal');
+    setLoading(false);
+  };
+
+  if (!currentUserId) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
 
   if (loading) {
     return <div className="app-loading">Loading timetable data...</div>;
@@ -151,8 +380,13 @@ export default function App() {
     <div className="app-container">
       <header className="app-header">
         <div className="header-content">
-          <h1>NUS Timetable Coordinator</h1>
-          <p>View and manage your schedule</p>
+          <div>
+            <h1>NUS Timetable Coordinator</h1>
+            <p>View and manage your schedule</p>
+          </div>
+          <button className="switch-user-button" type="button" onClick={handleSwitchUser}>
+            Switch User
+          </button>
         </div>
         <nav className="nav-tabs">
           <button
