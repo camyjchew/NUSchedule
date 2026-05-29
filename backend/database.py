@@ -5,26 +5,19 @@ from pathlib import Path
 DB_PATH = os.path.join(os.path.dirname(__file__), "timetable.db")
 
 
+REQUIRED_TABLES = {"users", "timetable_entries", "custom_events", "groups", "group_members"}
+
+
 def get_connection():
     """Get a database connection."""
+    init_db()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def init_db():
-    """Initialize the database schema."""
-    if os.path.exists(DB_PATH):
-        conn = get_connection()
-        cursor = conn.cursor()
-        prune_legacy_demo_account(cursor)
-        conn.commit()
-        conn.close()
-        return  # Database already exists
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
+def _create_schema(cursor):
+    """Create the database schema and seed rows."""
     # Create users table
     cursor.execute("""
     CREATE TABLE users (
@@ -80,8 +73,22 @@ def init_db():
     )
     """)
 
-    # Seed mock data
     seed_data(cursor)
+
+
+def init_db():
+    """Initialize the database schema."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    existing_tables = {row[0] for row in cursor.fetchall()}
+
+    if REQUIRED_TABLES.issubset(existing_tables):
+        prune_legacy_demo_account(cursor)
+    else:
+        _create_schema(cursor)
 
     conn.commit()
     conn.close()
