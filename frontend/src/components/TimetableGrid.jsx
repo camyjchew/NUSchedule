@@ -2,7 +2,7 @@ import React from 'react';
 import SlotBlock from './SlotBlock';
 import './TimetableGrid.css';
 
-export default function TimetableGrid({ slots }) {
+export default function TimetableGrid({ slots, onSlotClick }) {
   const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const START_HOUR = 8;
   const END_HOUR = 22;
@@ -35,14 +35,19 @@ export default function TimetableGrid({ slots }) {
   // Helper to render time column
   const renderTimeColumn = () => {
     const hours = [];
-    for (let h = START_HOUR; h <= END_HOUR; h++) {
+    for (let h = START_HOUR; h < END_HOUR; h++) {
       hours.push(
-        <div key={h} className="time-slot" style={{ height: `${100 / (END_HOUR - START_HOUR)}%` }}>
+        <div key={h} className="time-slot">
           <div className="time-label">{h.toString().padStart(2, '0')}:00</div>
         </div>
       );
     }
-    return <div className="time-column">{hours}</div>;
+    return (
+      <div className="time-column">
+        <div className="time-header-spacer" />
+        {hours}
+      </div>
+    );
   };
 
   // Helper to render day column
@@ -63,6 +68,7 @@ export default function TimetableGrid({ slots }) {
                   slot={slot}
                   topPercent={topPercent}
                   heightPercent={heightPercent}
+                  onClick={slot.type === 'custom' ? () => onSlotClick?.(slot) : undefined}
                 />
               );
             })}

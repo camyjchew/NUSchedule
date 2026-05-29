@@ -1,13 +1,14 @@
 import React from 'react';
 import './SlotBlock.css';
 
-export default function SlotBlock({ slot, topPercent, heightPercent }) {
+export default function SlotBlock({ slot, topPercent, heightPercent, onClick }) {
   const isBogey = slot.type === 'nusmods';
   const borderStyle = !isBogey ? '2px dashed' : 'none';
 
   return (
     <div
       className="slot-block"
+      onClick={onClick}
       style={{
         top: `${topPercent}%`,
         height: `${heightPercent}%`,
@@ -19,7 +20,7 @@ export default function SlotBlock({ slot, topPercent, heightPercent }) {
         fontWeight: '500',
         color: isBogey ? '#fff' : '#374151',
         overflow: 'hidden',
-        cursor: 'pointer',
+        cursor: onClick ? 'pointer' : 'default',
         transition: 'all 0.2s',
       }}
       title={`${slot.title} (${slot.startTime}-${slot.endTime})${slot.venue ? ' @ ' + slot.venue : ''}`}

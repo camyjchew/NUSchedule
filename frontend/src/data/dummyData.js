@@ -188,6 +188,3 @@ export const MOCK_GROUPS = [
     memberIds: [1, 2, 3]
   }
 ];
-
-// Current logged-in user (hardcoded for demo)
-export const CURRENT_USER_ID = 1; // Alice
