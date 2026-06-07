@@ -6,7 +6,20 @@ This project requires both a backend (Flask) and frontend (React + Vite) to run.
 - Python 3.8+
 - Node.js 16+ (with npm)
 
+
 ## Backend Setup
+
+# Quick Copy
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python app.py
+
+# Quick Copy
+cd frontend
+npm install
+npm run dev
 
 ### 1. Navigate to backend directory
 ```bash
@@ -29,17 +42,18 @@ pip install -r requirements.txt
 python app.py
 ```
 
-The backend will start on `http://localhost:5000`.
+The backend will start on `http://localhost:5001` by default (the Flask app sets port 5001).
 
 **Expected output:**
 ```
- * Running on http://127.0.0.1:5000
+ * Running on http://127.0.0.1:5001
  * Press CTRL+C to quit
 ```
 
 The database will be auto-created on first run with dummy data.
 
 ---
+
 
 ## Frontend Setup
 
@@ -51,6 +65,8 @@ cd frontend
 ### 2. Install dependencies
 ```bash
 npm install
+# or for reproducible installs use:
+# npm ci
 ```
 
 ### 3. Start the development server
@@ -60,14 +76,35 @@ npm run dev
 
 The frontend will start on `http://localhost:3000` and automatically proxy API calls to the backend.
 
+Note: the proxy in `vite.config.js` targets port `5001` by default, so ensure the backend is running first.
+
+Run the backend in one terminal and the frontend in another terminal.
+
+### Login / Demo Accounts
+
+The app includes 3 demo accounts you can pick from on the login screen:
+
+- Alice
+- Bob
+- Charlie
+
+There is also a blank-account creation flow for testing. Enter any name and email you want.
+
+You can also create a new blank account from the login screen. It starts with an empty timetable and no custom events.
+
+The backend uses a session cookie after login, so once you choose an account the timetable requests will use that logged-in user automatically.
+
+Custom events can be added from the timetable screen and will appear immediately in the UI for testing.
+They are currently kept local to the current session and can be discarded when switching users.
+
 ---
 
 ## Testing
 
-1. Backend is running on `http://localhost:5000`
+1. Backend is running on `http://localhost:5001`
 2. Frontend is running on `http://localhost:3000`
 
-Open `http://localhost:3000` in your browser.
+Open `http://localhost:3000` in a browser.
 
 ### Features to Test
 
@@ -141,6 +178,11 @@ The SQLite database (`backend/timetable.db`) is created automatically on first r
 - **Group**: "CS Project Group" with all 3 members
 
 To reset the database, delete `timetable.db` and restart the backend.
+
+Troubleshooting tips:
+- If port 5001 is already in use, change the `port` value in `backend/app.py` or update the proxy in `frontend/vite.config.js` and restart both servers.
+- If the frontend doesn't reflect changes, delete `node_modules/.vite` and restart the Vite dev server.
+- If you want to switch accounts, use the login screen's demo users or create a new blank account.
 
 ---
 
