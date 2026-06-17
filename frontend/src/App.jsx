@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import TimetableGrid from './components/TimetableGrid';
 import GroupView from './components/GroupView';
 import { NUSMODS_MODULE_DATA, MOCK_USERS } from './data/dummyData';
@@ -11,24 +11,20 @@ export default function App() {
   const [availableUsers, setAvailableUsers] = useState(MOCK_USERS);
   const [moduleSelections, setModuleSelections] = useState([]);
   const [customEvents, setCustomEvents] = useState([]);
-  const [mergedSlots, setMergedSlots] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [view, setView] = useState('personal'); // 'personal' or 'group'
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loginNotice, setLoginNotice] = useState('');
-  const [eventDraft, setEventDraft] = useState({
+  const [customEventDraft, setCustomEventDraft] = useState({
     title: '',
     day: 'Monday',
     startTime: '0900',
     endTime: '1000',
     color: '#60a5fa'
   });
-  const [selectedEvent, setSelectedEvent] = useState(null);
-
-  // State variables:
-  // - currentUserId: logged-in user id restored from the backend session.
-  // - moduleSelections & customEvents: user's module selections and personal events.
-  // - view: current UI mode, either 'personal' (own timetable) or 'group' (team overlay).
+  const [customEventFeedback, setCustomEventFeedback] = useState('');
+  const [savingCustomEvent, setSavingCustomEvent] = useState(false);
+  const [mergedSlots, setMergedSlots] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState('personal'); // 'personal' or 'group'
+  const moduleSelectionsRef = useRef(moduleSelections);
+  const customEventsRef = useRef(customEvents);
 
   // Helper function to get color for a module
   const getColorForModule = (moduleCode) => {
@@ -94,7 +90,180 @@ export default function App() {
     return slots;
   };
 
-  // Restore the logged-in session on mount, then load timetable data.
+  const formatTimeForInput = (time) => {
+    if (!time || time.length !== 4) {
+      return '';
+    }
+
+    return `${time.slice(0, 2)}:${time.slice(2, 4)}`;
+  };
+
+  const dayOrder = {
+    Monday: 0,
+    Tuesday: 1,
+    Wednesday: 2,
+    Thursday: 3,
+    Friday: 4
+  };
+
+  const timeToMinutes = (time) => {
+    if (!time || time.length !== 4) {
+      return 0;
+    }
+
+    const hours = Number(time.slice(0, 2));
+    const minutes = Number(time.slice(2, 4));
+    return hours * 60 + minutes;
+  };
+
+  const minutesToTime = (minutes) => {
+    const safeMinutes = Math.max(0, Math.min(24 * 60 - 1, minutes));
+    const hours = Math.floor(safeMinutes / 60)
+      .toString()
+      .padStart(2, '0');
+    const mins = Math.round(safeMinutes % 60)
+      .toString()
+      .padStart(2, '0');
+    return `${hours}${mins}`;
+  };
+
+  const sortCustomEvents = (events) => {
+    return [...events].sort((left, right) => {
+      const dayDiff = (dayOrder[left.day] ?? 99) - (dayOrder[right.day] ?? 99);
+      if (dayDiff !== 0) {
+        return dayDiff;
+      }
+
+      return timeToMinutes(left.startTime) - timeToMinutes(right.startTime);
+    });
+  };
+
+  const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+  const updateCustomEvent = async (eventId, updates, options = {}) => {
+    const { persist = false } = options;
+    const previousEvents = customEventsRef.current;
+    const nextEvents = sortCustomEvents(
+      previousEvents.map((event) => (event.id === eventId ? { ...event, ...updates } : event))
+    );
+
+    customEventsRef.current = nextEvents;
+    setCustomEvents(nextEvents);
+
+    if (!persist) {
+      return;
+    }
+
+    try {
+      await saveTimetable(moduleSelectionsRef.current, nextEvents);
+      setCustomEventFeedback('Custom event updated.');
+    } catch (error) {
+      console.error('Error updating custom event:', error);
+      customEventsRef.current = previousEvents;
+      setCustomEvents(previousEvents);
+      setCustomEventFeedback('Could not save the event update. Please try again.');
+    }
+  };
+
+  const editCustomEventTitle = async (eventId, title) => {
+    await updateCustomEvent(eventId, { title: title.trim() }, { persist: true });
+  };
+
+  const saveTimetable = async (nextSelections, nextEvents) => {
+    const response = await fetch(`/timetable/update?userId=${currentUserId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        userId: currentUserId,
+        moduleSelections: nextSelections,
+        customEvents: nextEvents
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to save timetable');
+    }
+  };
+
+  const updateCustomEventDraft = (field, value) => {
+    setCustomEventDraft((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
+
+  const handleAddCustomEvent = async (event) => {
+    event.preventDefault();
+
+    const title = customEventDraft.title.trim();
+    if (!title) {
+      setCustomEventFeedback('Add a title before saving the event.');
+      return;
+    }
+
+    if (Number(customEventDraft.endTime) <= Number(customEventDraft.startTime)) {
+      setCustomEventFeedback('End time must be later than start time.');
+      return;
+    }
+
+    const newEvent = {
+      id: window.crypto?.randomUUID?.() || `custom-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      title,
+      day: customEventDraft.day,
+      startTime: customEventDraft.startTime,
+      endTime: customEventDraft.endTime,
+      color: customEventDraft.color
+    };
+
+    const nextEvents = sortCustomEvents([...customEventsRef.current, newEvent]);
+    setSavingCustomEvent(true);
+    setCustomEventFeedback('');
+    customEventsRef.current = nextEvents;
+    setCustomEvents(nextEvents);
+
+    try {
+      await saveTimetable(moduleSelectionsRef.current, nextEvents);
+      setCustomEventDraft((current) => ({
+        ...current,
+        title: '',
+        startTime: '0900',
+        endTime: '1000'
+      }));
+      setCustomEventFeedback('Custom event saved.');
+    } catch (error) {
+      console.error('Error saving custom event:', error);
+      customEventsRef.current = sortCustomEvents(customEventsRef.current.filter((item) => item.id !== newEvent.id));
+      setCustomEvents(customEventsRef.current);
+      setCustomEventFeedback('Could not save the event. Please try again.');
+    } finally {
+      setSavingCustomEvent(false);
+    }
+  };
+
+  const handleDeleteCustomEvent = async (eventId) => {
+    const previousEvents = customEventsRef.current;
+    const nextEvents = previousEvents.filter((item) => item.id !== eventId);
+    setSavingCustomEvent(true);
+    setCustomEventFeedback('');
+    customEventsRef.current = nextEvents;
+    setCustomEvents(nextEvents);
+
+    try {
+      await saveTimetable(moduleSelectionsRef.current, nextEvents);
+      setCustomEventFeedback('Custom event deleted.');
+    } catch (error) {
+      console.error('Error deleting custom event:', error);
+      customEventsRef.current = previousEvents;
+      setCustomEvents(previousEvents);
+      setCustomEventFeedback('Could not delete the event. Please try again.');
+    } finally {
+      setSavingCustomEvent(false);
+    }
+  };
+
+  // Load initial data on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem('createdUsers');
@@ -186,10 +355,13 @@ export default function App() {
         }));
 
         setModuleSelections(normalizedSelections);
-        setCustomEvents(normalizedEvents);
+        const sortedEvents = sortCustomEvents(normalizedEvents);
+        setCustomEvents(sortedEvents);
+        moduleSelectionsRef.current = normalizedSelections;
+        customEventsRef.current = sortedEvents;
 
         // Merge slots
-        const merged = mergeSlots(normalizedSelections, normalizedEvents, nusmodsData);
+        const merged = mergeSlots(normalizedSelections, sortedEvents, nusmodsData);
         setMergedSlots(merged);
 
         const needsSync =
@@ -206,7 +378,7 @@ export default function App() {
             body: JSON.stringify({
               userId: currentUserId,
               moduleSelections: normalizedSelections,
-              customEvents: normalizedEvents
+              customEvents: sortedEvents
             })
           });
         }
@@ -219,7 +391,7 @@ export default function App() {
           { moduleCode: 'MA2001', lessonType: 'Lecture', classNo: '1' },
           { moduleCode: 'MA2001', lessonType: 'Tutorial', classNo: '01' }
         ]);
-        setCustomEvents([
+        const fallbackEvents = sortCustomEvents([
           {
             id: 'custom-1',
             title: 'Gym',
@@ -229,6 +401,8 @@ export default function App() {
             color: '#34d399'
           }
         ]);
+        setCustomEvents(fallbackEvents);
+        customEventsRef.current = fallbackEvents;
       } finally {
         setLoading(false);
       }
@@ -243,21 +417,16 @@ export default function App() {
     setMergedSlots(merged);
   }, [moduleSelections, customEvents, nusmodsData]);
 
-  const handleLogin = async (userId) => {
-    setLoginNotice('');
-    const selectedUser = availableUsers.find((user) => user.id === userId) || {
-      id: userId,
-      name: `User ${userId}`,
-      email: ''
-    };
+  useEffect(() => {
+    moduleSelectionsRef.current = moduleSelections;
+  }, [moduleSelections]);
 
-    await fetch('/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ userId })
-    });
+  useEffect(() => {
+    customEventsRef.current = customEvents;
+  }, [customEvents]);
 
+  const handleLogin = (userId) => {
+    window.localStorage.setItem('currentUserId', String(userId));
     setCurrentUserId(userId);
     setCurrentUser({
       userId: selectedUser.id,
@@ -405,33 +574,33 @@ export default function App() {
                 </div>
               </div>
             </div>
-
-            <div className="event-editor-card">
-              <div className="event-editor-header">
+            <form className="custom-event-panel" onSubmit={handleAddCustomEvent}>
+              <div className="custom-event-panel-header">
                 <div>
-                  <h3>Add custom event</h3>
-                  <p>Create personal events like gym, meetings, or reminders.</p>
+                  <h3>Add Custom Event</h3>
+                  <p>Create a personal event and save it to your timetable.</p>
                 </div>
-                <button className="event-editor-button" type="button" onClick={handleAddCustomEvent}>
-                  Add event
+                <button className="save-event-button" type="submit" disabled={savingCustomEvent}>
+                  {savingCustomEvent ? 'Saving...' : 'Save event'}
                 </button>
               </div>
 
-              <div className="event-editor-grid">
-                <label>
-                  Title
+              <div className="custom-event-fields">
+                <label className="custom-event-field">
+                  <span>Title</span>
                   <input
                     type="text"
-                    value={eventDraft.title}
-                    onChange={(event) => setEventDraft((draft) => ({ ...draft, title: event.target.value }))}
-                    placeholder="Gym"
+                    value={customEventDraft.title}
+                    onChange={(event) => updateCustomEventDraft('title', event.target.value)}
+                    placeholder="Gym, CCA, meeting..."
                   />
                 </label>
-                <label>
-                  Day
+
+                <label className="custom-event-field">
+                  <span>Day</span>
                   <select
-                    value={eventDraft.day}
-                    onChange={(event) => setEventDraft((draft) => ({ ...draft, day: event.target.value }))}
+                    value={customEventDraft.day}
+                    onChange={(event) => updateCustomEventDraft('day', event.target.value)}
                   >
                     {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'].map((day) => (
                       <option key={day} value={day}>
@@ -440,44 +609,80 @@ export default function App() {
                     ))}
                   </select>
                 </label>
-                <label>
-                  Start
+
+                <label className="custom-event-field">
+                  <span>Start</span>
                   <input
                     type="time"
-                    value={`${eventDraft.startTime.slice(0, 2)}:${eventDraft.startTime.slice(2, 4)}`}
-                    onChange={(event) =>
-                      setEventDraft((draft) => ({
-                        ...draft,
-                        startTime: event.target.value.replace(':', '')
-                      }))
-                    }
+                    step="60"
+                    value={formatTimeForInput(customEventDraft.startTime)}
+                    onChange={(event) => updateCustomEventDraft('startTime', event.target.value.replace(':', ''))}
                   />
                 </label>
-                <label>
-                  End
+
+                <label className="custom-event-field">
+                  <span>End</span>
                   <input
                     type="time"
-                    value={`${eventDraft.endTime.slice(0, 2)}:${eventDraft.endTime.slice(2, 4)}`}
-                    onChange={(event) =>
-                      setEventDraft((draft) => ({
-                        ...draft,
-                        endTime: event.target.value.replace(':', '')
-                      }))
-                    }
+                    step="60"
+                    value={formatTimeForInput(customEventDraft.endTime)}
+                    onChange={(event) => updateCustomEventDraft('endTime', event.target.value.replace(':', ''))}
                   />
                 </label>
-                <label>
-                  Color
+
+                <label className="custom-event-field">
+                  <span>Color</span>
                   <input
                     type="color"
-                    value={eventDraft.color}
-                    onChange={(event) => setEventDraft((draft) => ({ ...draft, color: event.target.value }))}
+                    value={customEventDraft.color}
+                    onChange={(event) => updateCustomEventDraft('color', event.target.value)}
                   />
                 </label>
               </div>
-            </div>
 
-            <TimetableGrid slots={mergedSlots} onSlotClick={handleCustomEventClick} />
+              <div className="custom-event-feedback" aria-live="polite">
+                {customEventFeedback || 'Saved events will appear below and on the timetable.'}
+              </div>
+
+              {customEvents.length > 0 && (
+                <div className="custom-event-list">
+                  {customEvents.map((event) => (
+                    <div key={event.id} className="custom-event-item">
+                      <div className="custom-event-item-main">
+                        <input
+                          className="custom-event-title-input"
+                          type="text"
+                          defaultValue={event.title}
+                          onBlur={(inputEvent) => {
+                            const nextTitle = inputEvent.target.value.trim();
+                            if (nextTitle && nextTitle !== event.title) {
+                              editCustomEventTitle(event.id, nextTitle);
+                            }
+                          }}
+                          onKeyDown={(inputEvent) => {
+                            if (inputEvent.key === 'Enter') {
+                              inputEvent.currentTarget.blur();
+                            }
+                          }}
+                        />
+                        <span>
+                          {event.day} • {formatTimeForInput(event.startTime)} to {formatTimeForInput(event.endTime)}
+                        </span>
+                      </div>
+                      <button
+                        className="delete-event-button"
+                        type="button"
+                        onClick={() => handleDeleteCustomEvent(event.id)}
+                        disabled={savingCustomEvent}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </form>
+            <TimetableGrid slots={mergedSlots} onCustomEventEdit={updateCustomEvent} />
             <div className="slots-summary">
               <p>Showing {mergedSlots.length} total slots this week</p>
             </div>

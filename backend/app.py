@@ -218,44 +218,11 @@ def health_check():
     return jsonify({"status": "ok"})
 
 
-# Root index to help users who visit the base URL in a browser.
 @app.route("/", methods=["GET"])
-def index():
-        """Render a simple landing page listing the backend endpoints."""
-        html = """
-        <!doctype html>
-        <html lang="en">
-            <head>
-                <meta charset="utf-8" />
-                <meta name="viewport" content="width=device-width,initial-scale=1" />
-                <title>Orbital Backend</title>
-                <style>
-                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial; padding: 2rem; }
-                    code { background:#f3f4f6; padding:0.2rem 0.4rem; border-radius:4px; }
-                    ul { line-height:1.6 }
-                </style>
-            </head>
-            <body>
-                <h1>Orbital Backend</h1>
-                <p>This is the development backend for the Orbital project. Available endpoints:</p>
-                <ul>
-                    <li><code>/health</code> — health check (returns JSON {"status":"ok"})</li>
-                    <li><code>/timetable</code> — GET the logged-in user's timetable (JSON)</li>
-                    <li><code>/timetable/update</code> — POST to update the logged-in user's timetable</li>
-                    <li><code>/group</code> — POST to create a group</li>
-                    <li><code>/group/&lt;id&gt;</code> — GET group data by id</li>
-                    <li><code>/login</code> — POST to start a demo session</li>
-                    <li><code>/logout</code> — POST to clear the session</li>
-                    <li><code>/register</code> — POST to create or reset a blank demo account</li>
-                    <li><code>/me</code> — GET the current session user</li>
-                </ul>
-                <p>If you see a 404 on <code>/</code> in a browser, refresh or try <code>/health</code>.</p>
-            </body>
-        </html>
-        """
-        return render_template_string(html)
+def root():
+    """Simple root response for quick backend checks."""
+    return "Backend is running"
 
 
-# Starting the Server
 if __name__ == "__main__":
     app.run(debug=True, port=5001, use_reloader=False)
