@@ -23,6 +23,9 @@ export default function App() {
   const [mergedSlots, setMergedSlots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('personal'); // 'personal' or 'group'
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loginNotice, setLoginNotice] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState(null);
   const moduleSelectionsRef = useRef(moduleSelections);
   const customEventsRef = useRef(customEvents);
 
@@ -474,25 +477,6 @@ export default function App() {
     setSelectedEvent(null);
     setView('personal');
     setLoading(false);
-  };
-
-  const handleAddCustomEvent = async () => {
-    if (!eventDraft.title.trim()) {
-      return;
-    }
-
-    const newEvent = {
-      id: `custom-${Date.now()}`,
-      title: eventDraft.title.trim(),
-      day: eventDraft.day,
-      startTime: eventDraft.startTime,
-      endTime: eventDraft.endTime,
-      color: eventDraft.color
-    };
-
-    const updatedEvents = [...customEvents, newEvent];
-    setCustomEvents(updatedEvents);
-    setEventDraft((draft) => ({ ...draft, title: '' }));
   };
 
   const handleCustomEventClick = (slot) => {
