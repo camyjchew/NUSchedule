@@ -3,7 +3,7 @@ import OverlayGrid from './OverlayGrid';
 import computeOverlay from '../utils/computeOverlay';
 import './GroupView.css';
 
-export default function GroupView({ groupId, nusmodsData }) {
+export default function GroupView({ groupId, nusmodsData, liveUserOverride }) {
   const [groupData, setGroupData] = useState(null);
   const [activeMembers, setActiveMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,8 +30,20 @@ export default function GroupView({ groupId, nusmodsData }) {
       return [];
     }
 
-    return computeOverlay(groupData.members, activeMembers, nusmodsData);
-  }, [groupData, activeMembers, nusmodsData]);
+    const members = groupData.members.map((member) => {
+      if (!liveUserOverride || member.userId !== liveUserOverride.userId) {
+        return member;
+      }
+
+      return {
+        ...member,
+        moduleSelections: liveUserOverride.moduleSelections,
+        customEvents: liveUserOverride.customEvents
+      };
+    });
+
+    return computeOverlay(members, activeMembers, nusmodsData);
+  }, [groupData, activeMembers, nusmodsData, liveUserOverride]);
 
   const toggleMember = (userId) => {
     setActiveMembers((prev) =>
@@ -53,6 +65,11 @@ export default function GroupView({ groupId, nusmodsData }) {
         <div>
           <h2>{groupData.name}</h2>
           <p>Colour-coded availability overlay for the active members.</p>
+          {liveUserOverride ? (
+            <p className="group-live-note">
+              Showing your live edits for <strong>{liveUserOverride.name}</strong>.
+            </p>
+          ) : null}
         </div>
         <div className="member-count">
           Showing {activeMembers.length} of {groupData.members.length} members

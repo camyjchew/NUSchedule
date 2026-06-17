@@ -17,8 +17,16 @@
   background: #f3f4f6;
 }
 
+.time-header-spacer {
+  height: 32px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
 .time-slot {
   display: flex;
+  flex: 1;
+  min-height: 0;
   align-items: flex-start;
   padding-top: 4px;
   border-bottom: 1px solid #e5e7eb;
