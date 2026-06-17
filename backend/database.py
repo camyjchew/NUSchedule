@@ -15,6 +15,11 @@ def get_connection():
 def init_db():
     """Initialize the database schema."""
     if os.path.exists(DB_PATH):
+        conn = get_connection()
+        cursor = conn.cursor()
+        prune_legacy_demo_account(cursor)
+        conn.commit()
+        conn.close()
         return  # Database already exists
 
     conn = get_connection()
@@ -80,6 +85,28 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+
+def prune_legacy_demo_account(cursor):
+    """Remove the old placeholder Delta account if it is still present."""
+    cursor.execute("SELECT id, name, email FROM users WHERE id = ?", (7,))
+    user_row = cursor.fetchone()
+    if not user_row:
+        return
+
+    if user_row["name"] != "Delta" or user_row["email"] != "delta@u.nus.edu":
+        return
+
+    cursor.execute("SELECT 1 FROM timetable_entries WHERE user_id = ? LIMIT 1", (7,))
+    has_timetable = cursor.fetchone() is not None
+    cursor.execute("SELECT 1 FROM custom_events WHERE user_id = ? LIMIT 1", (7,))
+    has_events = cursor.fetchone() is not None
+
+    if has_timetable or has_events:
+        return
+
+    cursor.execute("DELETE FROM group_members WHERE user_id = ?", (7,))
+    cursor.execute("DELETE FROM users WHERE id = ?", (7,))
 
 
 def seed_data(cursor):

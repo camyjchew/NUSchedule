@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import './SlotBlock.css';
 
 const TIMETABLE_START_MINUTES = 8 * 60;
@@ -76,6 +77,7 @@ export default function SlotBlock({ slot, topPercent, heightPercent, onCustomEve
   const interactionRef = useRef(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [draftTitle, setDraftTitle] = useState(slot.title);
+  const interactionRef = useRef(null);
 
   useEffect(() => {
     slotRef.current = slot;
@@ -300,6 +302,22 @@ export default function SlotBlock({ slot, topPercent, heightPercent, onCustomEve
         overflow: 'hidden',
         cursor: isCustomEvent ? 'grab' : 'default',
         boxShadow: isCustomEvent ? `0 0 0 1px rgba(15, 23, 42, 0.06), inset 0 0 0 1px ${hexToRgba(slot.color, 0.24)}` : '0 1px 3px rgba(0, 0, 0, 0.1)',
+
+  return (
+    <div
+      className={`slot-block ${isCustomEvent ? 'custom-slot' : ''}`}
+      style={{
+        top: `${topPercent}%`,
+        height: `${heightPercent}%`,
+        backgroundColor: isCustomEvent ? 'transparent' : slot.color,
+        border: borderStyle + ` ${slot.color}`,
+        borderRadius: '4px',
+        padding: '4px',
+        fontSize: '11px',
+        fontWeight: '500',
+        color: isCustomEvent ? '#374151' : '#fff',
+        overflow: 'hidden',
+        cursor: isCustomEvent ? 'grab' : 'default',
         transition: 'all 0.2s',
       }}
       title={`${slot.title} (${slot.startTime}-${slot.endTime})${slot.venue ? ' @ ' + slot.venue : ''}`}
@@ -346,6 +364,7 @@ export default function SlotBlock({ slot, topPercent, heightPercent, onCustomEve
             {slot.startTime.slice(0, 2)}:{slot.startTime.slice(2, 4)} - {slot.endTime.slice(0, 2)}:{slot.endTime.slice(2, 4)}
           </div>
         )}
+        <div className="slot-block-title">{slot.title}</div>
         {slot.venue && <div className="slot-block-venue">{slot.venue}</div>}
       </div>
       {isCustomEvent && (

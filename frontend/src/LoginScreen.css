@@ -9,7 +9,7 @@
 }
 
 .login-card {
-  width: min(100%, 460px);
+  width: min(100%, 760px);
   padding: 32px;
   border: 1px solid rgba(148, 163, 184, 0.3);
   border-radius: 24px;
@@ -44,10 +44,47 @@
   color: #475569;
 }
 
+.login-notice {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #ecfeff;
+  color: #155e75;
+  border: 1px solid #a5f3fc;
+  font-size: 13px;
+}
+
+.login-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 28px;
+}
+
+.login-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  border-radius: 20px;
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.panel-heading h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.panel-heading p {
+  margin-top: 4px;
+  font-size: 14px;
+}
+
 .login-user-list {
   display: grid;
   gap: 12px;
-  margin-top: 28px;
 }
 
 .login-user-button {
@@ -69,6 +106,75 @@
   transform: translateY(-1px);
   border-color: #818cf8;
   box-shadow: 0 12px 24px rgba(79, 70, 229, 0.12);
+}
+
+.login-user-button--delta {
+  border-color: #4f46e5;
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(37, 99, 235, 0.08));
+}
+
+.login-user-button--delta:hover {
+  border-color: #4f46e5;
+}
+
+.login-user-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+  box-shadow: none;
+}
+
+.create-account-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.create-account-form input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: white;
+  color: #0f172a;
+  font: inherit;
+}
+
+.create-account-form input:focus {
+  outline: 2px solid rgba(99, 102, 241, 0.25);
+  border-color: #818cf8;
+}
+
+.create-account-button {
+  margin-top: 4px;
+  background: linear-gradient(135deg, #4f46e5, #2563eb);
+  border-color: transparent;
+  color: #fff;
+}
+
+.create-account-button .login-user-name {
+  color: #fff;
+}
+
+.create-account-button:hover {
+  border-color: transparent;
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.22);
+}
+
+.create-account-button .login-user-email {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+@media (max-width: 760px) {
+  .login-card {
+    padding: 24px;
+  }
+
+  .login-panels {
+    grid-template-columns: 1fr;
+  }
 }
 
 .login-user-name {
