@@ -4,9 +4,66 @@
   right: 0;
   margin: 2px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  user-select: none;
+}
+
+.slot-block.custom-slot {
+  border-style: dashed;
+  background: #fff;
+}
+
+.slot-block-content {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.slot-block-title {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.slot-block-venue {
+  font-size: 10px;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+.slot-block-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 8px;
+  z-index: 2;
+  cursor: ns-resize;
+}
+
+.slot-block-handle-top {
+  top: 0;
+}
+
+.slot-block-handle-bottom {
+  bottom: 0;
+}
+
+.slot-block-handle-top::after,
+.slot-block-handle-bottom::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40%;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.18);
+  top: 3px;
 }
 
 .slot-block:hover {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
   z-index: 10;
+}
+
+body.slot-dragging {
+  cursor: grabbing;
 }

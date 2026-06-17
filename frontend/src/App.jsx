@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import TimetableGrid from './components/TimetableGrid';
 import GroupView from './components/GroupView';
 import { NUSMODS_MODULE_DATA } from './data/dummyData';
@@ -17,9 +17,20 @@ export default function App() {
   });
   const [moduleSelections, setModuleSelections] = useState([]);
   const [customEvents, setCustomEvents] = useState([]);
+  const [customEventDraft, setCustomEventDraft] = useState({
+    title: '',
+    day: 'Monday',
+    startTime: '0900',
+    endTime: '1000',
+    color: '#60a5fa'
+  });
+  const [customEventFeedback, setCustomEventFeedback] = useState('');
+  const [savingCustomEvent, setSavingCustomEvent] = useState(false);
   const [mergedSlots, setMergedSlots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('personal'); // 'personal' or 'group'
+  const moduleSelectionsRef = useRef(moduleSelections);
+  const customEventsRef = useRef(customEvents);
 
   // Helper function to get color for a module
   const getColorForModule = (moduleCode) => {
@@ -296,10 +307,13 @@ export default function App() {
         }));
 
         setModuleSelections(normalizedSelections);
-        setCustomEvents(normalizedEvents);
+        const sortedEvents = sortCustomEvents(normalizedEvents);
+        setCustomEvents(sortedEvents);
+        moduleSelectionsRef.current = normalizedSelections;
+        customEventsRef.current = sortedEvents;
 
         // Merge slots
-        const merged = mergeSlots(normalizedSelections, normalizedEvents, nusmodsData);
+        const merged = mergeSlots(normalizedSelections, sortedEvents, nusmodsData);
         setMergedSlots(merged);
 
         const needsSync =
@@ -315,7 +329,7 @@ export default function App() {
             body: JSON.stringify({
               userId: currentUserId,
               moduleSelections: normalizedSelections,
-              customEvents: normalizedEvents
+              customEvents: sortedEvents
             })
           });
         }
@@ -328,7 +342,7 @@ export default function App() {
           { moduleCode: 'MA2001', lessonType: 'Lecture', classNo: '1' },
           { moduleCode: 'MA2001', lessonType: 'Tutorial', classNo: '01' }
         ]);
-        setCustomEvents([
+        const fallbackEvents = sortCustomEvents([
           {
             id: 'custom-1',
             title: 'Gym',
@@ -338,6 +352,8 @@ export default function App() {
             color: '#34d399'
           }
         ]);
+        setCustomEvents(fallbackEvents);
+        customEventsRef.current = fallbackEvents;
       } finally {
         setLoading(false);
       }
@@ -351,6 +367,14 @@ export default function App() {
     const merged = mergeSlots(moduleSelections, customEvents, nusmodsData);
     setMergedSlots(merged);
   }, [moduleSelections, customEvents, nusmodsData]);
+
+  useEffect(() => {
+    moduleSelectionsRef.current = moduleSelections;
+  }, [moduleSelections]);
+
+  useEffect(() => {
+    customEventsRef.current = customEvents;
+  }, [customEvents]);
 
   const handleLogin = (userId) => {
     window.localStorage.setItem('currentUserId', String(userId));
@@ -420,7 +444,115 @@ export default function App() {
                 </div>
               </div>
             </div>
-            <TimetableGrid slots={mergedSlots} />
+            <form className="custom-event-panel" onSubmit={handleAddCustomEvent}>
+              <div className="custom-event-panel-header">
+                <div>
+                  <h3>Add Custom Event</h3>
+                  <p>Create a personal event and save it to your timetable.</p>
+                </div>
+                <button className="save-event-button" type="submit" disabled={savingCustomEvent}>
+                  {savingCustomEvent ? 'Saving...' : 'Save event'}
+                </button>
+              </div>
+
+              <div className="custom-event-fields">
+                <label className="custom-event-field">
+                  <span>Title</span>
+                  <input
+                    type="text"
+                    value={customEventDraft.title}
+                    onChange={(event) => updateCustomEventDraft('title', event.target.value)}
+                    placeholder="Gym, CCA, meeting..."
+                  />
+                </label>
+
+                <label className="custom-event-field">
+                  <span>Day</span>
+                  <select
+                    value={customEventDraft.day}
+                    onChange={(event) => updateCustomEventDraft('day', event.target.value)}
+                  >
+                    {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'].map((day) => (
+                      <option key={day} value={day}>
+                        {day}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="custom-event-field">
+                  <span>Start</span>
+                  <input
+                    type="time"
+                    step="60"
+                    value={formatTimeForInput(customEventDraft.startTime)}
+                    onChange={(event) => updateCustomEventDraft('startTime', event.target.value.replace(':', ''))}
+                  />
+                </label>
+
+                <label className="custom-event-field">
+                  <span>End</span>
+                  <input
+                    type="time"
+                    step="60"
+                    value={formatTimeForInput(customEventDraft.endTime)}
+                    onChange={(event) => updateCustomEventDraft('endTime', event.target.value.replace(':', ''))}
+                  />
+                </label>
+
+                <label className="custom-event-field">
+                  <span>Color</span>
+                  <input
+                    type="color"
+                    value={customEventDraft.color}
+                    onChange={(event) => updateCustomEventDraft('color', event.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div className="custom-event-feedback" aria-live="polite">
+                {customEventFeedback || 'Saved events will appear below and on the timetable.'}
+              </div>
+
+              {customEvents.length > 0 && (
+                <div className="custom-event-list">
+                  {customEvents.map((event) => (
+                    <div key={event.id} className="custom-event-item">
+                      <div className="custom-event-item-main">
+                        <input
+                          className="custom-event-title-input"
+                          type="text"
+                          defaultValue={event.title}
+                          onBlur={(inputEvent) => {
+                            const nextTitle = inputEvent.target.value.trim();
+                            if (nextTitle && nextTitle !== event.title) {
+                              editCustomEventTitle(event.id, nextTitle);
+                            }
+                          }}
+                          onKeyDown={(inputEvent) => {
+                            if (inputEvent.key === 'Enter') {
+                              inputEvent.currentTarget.blur();
+                            }
+                          }}
+                        />
+                        <span>
+                          {event.day} • {formatTimeForInput(event.startTime)} to {formatTimeForInput(event.endTime)}
+                        </span>
+                      </div>
+                      <button
+                        className="delete-event-button"
+                        type="button"
+                        onClick={() => handleDeleteCustomEvent(event.id)}
+                        disabled={savingCustomEvent}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </form>
+            <TimetableGrid slots={mergedSlots} onCustomEventEdit={updateCustomEvent} />
             <div className="slots-summary">
               <p>Showing {mergedSlots.length} total slots this week</p>
             </div>

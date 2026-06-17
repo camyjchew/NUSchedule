@@ -72,5 +72,11 @@ def health_check():
     return jsonify({"status": "ok"})
 
 
+@app.route("/", methods=["GET"])
+def root():
+    """Simple root response for quick backend checks."""
+    return "Backend is running"
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5001, use_reloader=False)
