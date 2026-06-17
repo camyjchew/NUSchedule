@@ -1,3 +1,4 @@
+import React, { useEffect, useRef, useState } from 'react';
 import React, { useEffect, useRef } from 'react';
 import './SlotBlock.css';
 
@@ -27,6 +28,27 @@ const timeToMinutes = (time) => {
 
 const snapMinutes = (minutes) => Math.round(minutes / SNAP_MINUTES) * SNAP_MINUTES;
 
+const hexToRgba = (hex, alpha) => {
+  if (!hex || typeof hex !== 'string') {
+    return `rgba(96, 165, 250, ${alpha})`;
+  }
+
+  const normalized = hex.replace('#', '');
+  if (normalized.length !== 6) {
+    return hex;
+  }
+
+  const red = Number.parseInt(normalized.slice(0, 2), 16);
+  const green = Number.parseInt(normalized.slice(2, 4), 16);
+  const blue = Number.parseInt(normalized.slice(4, 6), 16);
+
+  if ([red, green, blue].some(Number.isNaN)) {
+    return hex;
+  }
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+};
+
 const getDayColumn = (clientX, clientY, fallbackDay) => {
   const element = document.elementFromPoint(clientX, clientY);
   const dayColumn = element?.closest?.('.day-column[data-day]');
@@ -51,11 +73,28 @@ export default function SlotBlock({ slot, topPercent, heightPercent, onCustomEve
   const isCustomEvent = slot.type === 'custom';
   const borderStyle = !isCustomEvent ? '2px dashed' : 'none';
   const slotRef = useRef(slot);
+  const titleInputRef = useRef(null);
+  const interactionRef = useRef(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(slot.title);
   const interactionRef = useRef(null);
 
   useEffect(() => {
     slotRef.current = slot;
   }, [slot]);
+
+  useEffect(() => {
+    if (!isEditingTitle) {
+      setDraftTitle(slot.title);
+    }
+  }, [slot.title, isEditingTitle]);
+
+  useEffect(() => {
+    if (isEditingTitle) {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }
+  }, [isEditingTitle]);
 
   useEffect(() => {
     return () => {
@@ -87,6 +126,7 @@ export default function SlotBlock({ slot, topPercent, heightPercent, onCustomEve
     onCustomEventEdit(
       slot.id,
       {
+        title: slotRef.current.title,
         day: nextSlot.day,
         startTime: nextSlot.startTime,
         endTime: nextSlot.endTime
@@ -208,6 +248,61 @@ export default function SlotBlock({ slot, topPercent, heightPercent, onCustomEve
     document.addEventListener('pointercancel', finishInteraction, { once: true });
   };
 
+  const beginTitleEdit = (event) => {
+    if (!isCustomEvent || !onCustomEventEdit) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setDraftTitle(slotRef.current.title);
+    setIsEditingTitle(true);
+  };
+
+  const saveTitleEdit = () => {
+    if (!isCustomEvent || !onCustomEventEdit) {
+      setIsEditingTitle(false);
+      return;
+    }
+
+    const nextTitle = draftTitle.trim();
+    const currentTitle = slotRef.current.title.trim();
+
+    if (!nextTitle) {
+      setDraftTitle(slotRef.current.title);
+      setIsEditingTitle(false);
+      return;
+    }
+
+    setIsEditingTitle(false);
+
+    if (nextTitle !== currentTitle) {
+      onCustomEventEdit(slot.id, { title: nextTitle }, { persist: true });
+    }
+  };
+
+  const cancelTitleEdit = () => {
+    setDraftTitle(slotRef.current.title);
+    setIsEditingTitle(false);
+  };
+
+  return (
+    <div
+      className={`slot-block ${isCustomEvent ? 'custom-slot' : ''} ${isEditingTitle ? 'editing-title' : ''}`}
+      style={{
+        top: `${topPercent}%`,
+        height: `${heightPercent}%`,
+        backgroundColor: isCustomEvent ? hexToRgba(slot.color, 0.18) : slot.color,
+        border: isCustomEvent ? `2px solid ${slot.color}` : borderStyle + ` ${slot.color}`,
+        borderRadius: '6px',
+        padding: '5px 6px',
+        fontSize: '11px',
+        fontWeight: '500',
+        color: isCustomEvent ? '#0f172a' : '#fff',
+        overflow: 'hidden',
+        cursor: isCustomEvent ? 'grab' : 'default',
+        boxShadow: isCustomEvent ? `0 0 0 1px rgba(15, 23, 42, 0.06), inset 0 0 0 1px ${hexToRgba(slot.color, 0.24)}` : '0 1px 3px rgba(0, 0, 0, 0.1)',
+
   return (
     <div
       className={`slot-block ${isCustomEvent ? 'custom-slot' : ''}`}
@@ -229,6 +324,46 @@ export default function SlotBlock({ slot, topPercent, heightPercent, onCustomEve
       onPointerDown={(pointerEvent) => beginInteraction('move', pointerEvent)}
     >
       <div className="slot-block-content">
+        {isCustomEvent && isEditingTitle ? (
+          <input
+            ref={titleInputRef}
+            className="slot-block-title-input"
+            type="text"
+            value={draftTitle}
+            onChange={(changeEvent) => setDraftTitle(changeEvent.target.value)}
+            onBlur={saveTitleEdit}
+            onKeyDown={(keyEvent) => {
+              if (keyEvent.key === 'Enter') {
+                keyEvent.preventDefault();
+                saveTitleEdit();
+              }
+
+              if (keyEvent.key === 'Escape') {
+                keyEvent.preventDefault();
+                cancelTitleEdit();
+              }
+            }}
+            onPointerDown={(pointerEvent) => pointerEvent.stopPropagation()}
+          />
+        ) : (
+          <div
+            className={`slot-block-title ${isCustomEvent ? 'slot-block-title-editable' : ''}`}
+            onDoubleClick={beginTitleEdit}
+            onPointerDown={(pointerEvent) => {
+              if (isCustomEvent) {
+                pointerEvent.stopPropagation();
+              }
+            }}
+            title={isCustomEvent ? 'Double click to edit the title' : undefined}
+          >
+            {slot.title}
+          </div>
+        )}
+        {isCustomEvent && !isEditingTitle && (
+          <div className="slot-block-time">
+            {slot.startTime.slice(0, 2)}:{slot.startTime.slice(2, 4)} - {slot.endTime.slice(0, 2)}:{slot.endTime.slice(2, 4)}
+          </div>
+        )}
         <div className="slot-block-title">{slot.title}</div>
         {slot.venue && <div className="slot-block-venue">{slot.venue}</div>}
       </div>
