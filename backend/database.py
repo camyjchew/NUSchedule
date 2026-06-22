@@ -12,12 +12,29 @@ def get_connection():
     return conn
 
 
+def _ensure_slot_overrides_table(cursor):
+    """Create the slot_overrides table if it doesn't exist yet (migration-safe)."""
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS slot_overrides (
+        user_id INTEGER NOT NULL,
+        module_code TEXT NOT NULL,
+        lesson_type TEXT NOT NULL,
+        class_no TEXT NOT NULL,
+        color TEXT,
+        label TEXT,
+        PRIMARY KEY (user_id, module_code, lesson_type, class_no),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+    """)
+
+
 def init_db():
     """Initialize the database schema."""
     if os.path.exists(DB_PATH):
         conn = get_connection()
         cursor = conn.cursor()
         prune_legacy_demo_account(cursor)
+        _ensure_slot_overrides_table(cursor)
         conn.commit()
         conn.close()
         return  # Database already exists
@@ -79,6 +96,8 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )
     """)
+
+    _ensure_slot_overrides_table(cursor)
 
     # Seed mock data
     seed_data(cursor)
@@ -181,21 +200,33 @@ def get_user_timetable(user_id):
     )
     custom_events = [dict(row) for row in cursor.fetchall()]
 
+    # Get per-slot overrides (user edits to NUSMods-sourced color/label).
+    # These are kept separate from timetable_entries so a future NUSMods
+    # re-import never wipes them out implicitly.
+    cursor.execute(
+        "SELECT module_code, lesson_type, class_no, color, label FROM slot_overrides WHERE user_id = ?",
+        (user_id,)
+    )
+    slot_overrides = [dict(row) for row in cursor.fetchall()]
+
     conn.close()
     return {
         "moduleSelections": module_selections,
-        "customEvents": custom_events
+        "customEvents": custom_events,
+        "slotOverrides": slot_overrides
     }
 
 
-def update_user_timetable(user_id, module_selections, custom_events):
-    """Update a user's timetable entries and custom events."""
+def update_user_timetable(user_id, module_selections, custom_events, slot_overrides=None):
+    """Update a user's timetable entries, custom events, and slot overrides."""
+    slot_overrides = slot_overrides or []
     conn = get_connection()
     cursor = conn.cursor()
 
     # Delete existing entries
     cursor.execute("DELETE FROM timetable_entries WHERE user_id = ?", (user_id,))
     cursor.execute("DELETE FROM custom_events WHERE user_id = ?", (user_id,))
+    cursor.execute("DELETE FROM slot_overrides WHERE user_id = ?", (user_id,))
 
     # Insert new module selections
     for entry in module_selections:
@@ -209,6 +240,20 @@ def update_user_timetable(user_id, module_selections, custom_events):
         cursor.execute(
             "INSERT INTO custom_events (id, user_id, title, day, start_time, end_time, color) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (event["id"], user_id, event["title"], event["day"], event["startTime"], event["endTime"], event["color"])
+        )
+
+    # Insert slot overrides
+    for override in slot_overrides:
+        cursor.execute(
+            "INSERT INTO slot_overrides (user_id, module_code, lesson_type, class_no, color, label) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                user_id,
+                override["moduleCode"],
+                override["lessonType"],
+                override["classNo"],
+                override.get("color"),
+                override.get("label")
+            )
         )
 
     conn.commit()

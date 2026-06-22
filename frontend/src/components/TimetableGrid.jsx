@@ -2,7 +2,7 @@ import React from 'react';
 import SlotBlock from './SlotBlock';
 import './TimetableGrid.css';
 
-export default function TimetableGrid({ slots, onCustomEventEdit }) {
+export default function TimetableGrid({ slots, onCustomEventEdit, onCustomEventClick, onModuleSlotClick }) {
   const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const START_HOUR = 8;
   const END_HOUR = 22;
@@ -69,6 +69,8 @@ export default function TimetableGrid({ slots, onCustomEventEdit }) {
                   topPercent={topPercent}
                   heightPercent={heightPercent}
                   onCustomEventEdit={onCustomEventEdit}
+                  onCustomEventClick={onCustomEventClick}
+                  onModuleSlotClick={onModuleSlotClick}
                 />
               );
             })}

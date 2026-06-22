@@ -27,6 +27,8 @@ const timeToMinutes = (time) => {
 
 const snapMinutes = (minutes) => Math.round(minutes / SNAP_MINUTES) * SNAP_MINUTES;
 
+const CLICK_THRESHOLD_PX = 4;
+
 const getDayColumn = (clientX, clientY, fallbackDay) => {
   const element = document.elementFromPoint(clientX, clientY);
   const dayColumn = element?.closest?.('.day-column[data-day]');
@@ -47,9 +49,9 @@ const getDayContent = (clientX, clientY, fallbackDay) => {
   return dayColumn?.querySelector('.day-content') || null;
 };
 
-export default function SlotBlock({ slot, topPercent, heightPercent, onCustomEventEdit }) {
+export default function SlotBlock({ slot, topPercent, heightPercent, onCustomEventEdit, onCustomEventClick, onModuleSlotClick }) {
   const isCustomEvent = slot.type === 'custom';
-  const borderStyle = !isCustomEvent ? '2px dashed' : 'none';
+  const borderStyle = isCustomEvent ? '2px dashed' : 'none';
   const slotRef = useRef(slot);
   const interactionRef = useRef(null);
 
@@ -99,6 +101,15 @@ export default function SlotBlock({ slot, topPercent, heightPercent, onCustomEve
     const interaction = interactionRef.current;
     if (!interaction) {
       return;
+    }
+
+    if (!interaction.moved) {
+      const dx = pointerEvent.clientX - interaction.startX;
+      const dy = pointerEvent.clientY - interaction.startY;
+      if (Math.hypot(dx, dy) < CLICK_THRESHOLD_PX) {
+        return;
+      }
+      interaction.moved = true;
     }
 
     pointerEvent.preventDefault();
@@ -174,6 +185,14 @@ export default function SlotBlock({ slot, topPercent, heightPercent, onCustomEve
       return;
     }
 
+    if (!interaction.moved) {
+      stopInteraction();
+      if (interaction.mode === 'move') {
+        onCustomEventClick?.(slotRef.current);
+      }
+      return;
+    }
+
     const finalSlot = interaction.lastUpdate || slotRef.current;
     stopInteraction();
 
@@ -199,7 +218,10 @@ export default function SlotBlock({ slot, topPercent, heightPercent, onCustomEve
 
     interactionRef.current = {
       mode,
-      offsetY: pointerEvent.nativeEvent.offsetY ?? 0
+      offsetY: pointerEvent.nativeEvent.offsetY ?? 0,
+      startX: pointerEvent.clientX,
+      startY: pointerEvent.clientY,
+      moved: false
     };
 
     document.body.classList.add('slot-dragging');
@@ -222,11 +244,12 @@ export default function SlotBlock({ slot, topPercent, heightPercent, onCustomEve
         fontWeight: '500',
         color: isCustomEvent ? '#374151' : '#fff',
         overflow: 'hidden',
-        cursor: isCustomEvent ? 'grab' : 'default',
+        cursor: isCustomEvent ? 'grab' : (onModuleSlotClick ? 'pointer' : 'default'),
         transition: 'all 0.2s',
       }}
       title={`${slot.title} (${slot.startTime}-${slot.endTime})${slot.venue ? ' @ ' + slot.venue : ''}`}
-      onPointerDown={(pointerEvent) => beginInteraction('move', pointerEvent)}
+      onPointerDown={isCustomEvent ? (pointerEvent) => beginInteraction('move', pointerEvent) : undefined}
+      onClick={!isCustomEvent ? () => onModuleSlotClick?.(slot) : undefined}
     >
       <div className="slot-block-content">
         <div className="slot-block-title">{slot.title}</div>

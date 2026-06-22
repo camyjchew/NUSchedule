@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import TimetableGrid from './components/TimetableGrid';
 import GroupView from './components/GroupView';
 import { NUSMODS_MODULE_DATA, MOCK_USERS } from './data/dummyData';
@@ -26,8 +26,13 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loginNotice, setLoginNotice] = useState('');
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [eventEditDraft, setEventEditDraft] = useState(null);
+  const [slotOverrides, setSlotOverrides] = useState([]);
+  const [selectedModuleSlot, setSelectedModuleSlot] = useState(null);
+  const [moduleSlotEditDraft, setModuleSlotEditDraft] = useState(null);
   const moduleSelectionsRef = useRef(moduleSelections);
   const customEventsRef = useRef(customEvents);
+  const slotOverridesRef = useRef(slotOverrides);
 
   // Helper function to get color for a module
   const getColorForModule = (moduleCode) => {
@@ -39,9 +44,16 @@ export default function App() {
     return colors[moduleCode] || '#60a5fa';
   };
 
-  // Pure function to merge slots from module selections and custom events
-  const mergeSlots = (selections, events, modulesData) => {
+  // Identity key for a NUSMods lesson slot, used to attach overrides to it.
+  const overrideKey = (moduleCode, lessonType, classNo) => `${moduleCode}-${lessonType}-${classNo}`;
+
+  // Pure function to merge slots from module selections, custom events, and
+  // per-slot overrides (color/label edits layered on top of the NUSMods data).
+  const mergeSlots = (selections, events, modulesData, overrides) => {
     const slots = [];
+    const overrideMap = new Map(
+      (overrides || []).map((o) => [overrideKey(o.moduleCode, o.lessonType, o.classNo), o])
+    );
 
     // Process module selections
     selections.forEach(selection => {
@@ -57,16 +69,18 @@ export default function App() {
           const moduleCode = selection.moduleCode || selection.module_code;
           const lessonType = selection.lessonType || selection.lesson_type;
           const classNo = selection.classNo || selection.class_no;
+          const key = overrideKey(moduleCode, lessonType, classNo);
+          const override = overrideMap.get(key);
 
           slots.push({
-            id: `${moduleCode}-${lessonType}-${classNo}`,
-            title: `${moduleCode} ${lessonType}`,
+            id: key,
+            title: override?.label || `${moduleCode} ${lessonType}`,
             day: lessonSlot.day,
             startTime: lessonSlot.startTime,
             endTime: lessonSlot.endTime,
             type: 'nusmods',
             venue: lessonSlot.venue,
-            color: getColorForModule(moduleCode),
+            color: override?.color || getColorForModule(moduleCode),
             moduleCode,
             lessonType,
             classNo,
@@ -172,7 +186,7 @@ export default function App() {
     await updateCustomEvent(eventId, { title: title.trim() }, { persist: true });
   };
 
-  const saveTimetable = async (nextSelections, nextEvents) => {
+  const saveTimetable = async (nextSelections, nextEvents, nextOverrides) => {
     const response = await fetch(`/timetable/update?userId=${currentUserId}`, {
       method: 'POST',
       headers: {
@@ -181,12 +195,72 @@ export default function App() {
       body: JSON.stringify({
         userId: currentUserId,
         moduleSelections: nextSelections,
-        customEvents: nextEvents
+        customEvents: nextEvents,
+        slotOverrides: nextOverrides ?? slotOverridesRef.current
       })
     });
 
     if (!response.ok) {
       throw new Error('Failed to save timetable');
+    }
+  };
+
+  const upsertSlotOverride = async (moduleCode, lessonType, classNo, updates, options = {}) => {
+    const { persist = false } = options;
+    const key = overrideKey(moduleCode, lessonType, classNo);
+    const previousOverrides = slotOverridesRef.current;
+    const existing = previousOverrides.find(
+      (o) => overrideKey(o.moduleCode, o.lessonType, o.classNo) === key
+    );
+    const nextOverride = {
+      moduleCode,
+      lessonType,
+      classNo,
+      color: existing?.color,
+      label: existing?.label,
+      ...updates
+    };
+    const nextOverrides = [
+      ...previousOverrides.filter((o) => overrideKey(o.moduleCode, o.lessonType, o.classNo) !== key),
+      nextOverride
+    ];
+
+    slotOverridesRef.current = nextOverrides;
+    setSlotOverrides(nextOverrides);
+
+    if (!persist) {
+      return;
+    }
+
+    try {
+      await saveTimetable(moduleSelectionsRef.current, customEventsRef.current, nextOverrides);
+      setCustomEventFeedback('Class style updated.');
+    } catch (error) {
+      console.error('Error saving slot override:', error);
+      slotOverridesRef.current = previousOverrides;
+      setSlotOverrides(previousOverrides);
+      setCustomEventFeedback('Could not save the change. Please try again.');
+    }
+  };
+
+  const resetSlotOverride = async (moduleCode, lessonType, classNo) => {
+    const key = overrideKey(moduleCode, lessonType, classNo);
+    const previousOverrides = slotOverridesRef.current;
+    const nextOverrides = previousOverrides.filter(
+      (o) => overrideKey(o.moduleCode, o.lessonType, o.classNo) !== key
+    );
+
+    slotOverridesRef.current = nextOverrides;
+    setSlotOverrides(nextOverrides);
+
+    try {
+      await saveTimetable(moduleSelectionsRef.current, customEventsRef.current, nextOverrides);
+      setCustomEventFeedback('Reset to NUSMods default.');
+    } catch (error) {
+      console.error('Error resetting slot override:', error);
+      slotOverridesRef.current = previousOverrides;
+      setSlotOverrides(previousOverrides);
+      setCustomEventFeedback('Could not reset the change. Please try again.');
     }
   };
 
@@ -340,6 +414,7 @@ export default function App() {
         const data = await response.json();
         const fetchedSelections = data.moduleSelections || [];
         const fetchedEvents = data.customEvents || [];
+        const fetchedOverrides = data.slotOverrides || [];
 
         // Normalize the API response format to our naming conventions
         const normalizedSelections = fetchedSelections.map(s => ({
@@ -360,11 +435,13 @@ export default function App() {
         setModuleSelections(normalizedSelections);
         const sortedEvents = sortCustomEvents(normalizedEvents);
         setCustomEvents(sortedEvents);
+        setSlotOverrides(fetchedOverrides);
         moduleSelectionsRef.current = normalizedSelections;
         customEventsRef.current = sortedEvents;
+        slotOverridesRef.current = fetchedOverrides;
 
         // Merge slots
-        const merged = mergeSlots(normalizedSelections, sortedEvents, nusmodsData);
+        const merged = mergeSlots(normalizedSelections, sortedEvents, nusmodsData, fetchedOverrides);
         setMergedSlots(merged);
 
         const needsSync =
@@ -414,11 +491,11 @@ export default function App() {
     loadData();
   }, [currentUserId, nusmodsData]);
 
-  // Re-merge slots whenever selections or events change
+  // Re-merge slots whenever selections, events, or overrides change
   useEffect(() => {
-    const merged = mergeSlots(moduleSelections, customEvents, nusmodsData);
+    const merged = mergeSlots(moduleSelections, customEvents, nusmodsData, slotOverrides);
     setMergedSlots(merged);
-  }, [moduleSelections, customEvents, nusmodsData]);
+  }, [moduleSelections, customEvents, nusmodsData, slotOverrides]);
 
   useEffect(() => {
     moduleSelectionsRef.current = moduleSelections;
@@ -428,7 +505,41 @@ export default function App() {
     customEventsRef.current = customEvents;
   }, [customEvents]);
 
-  const handleLogin = (userId) => {
+  useEffect(() => {
+    slotOverridesRef.current = slotOverrides;
+  }, [slotOverrides]);
+
+  // Overrides whose (moduleCode, lessonType, classNo) no longer matches a
+  // currently selected lesson — e.g. after a fresh NUSMods import changed
+  // class numbers. The override is kept (not deleted), but won't visibly
+  // apply until that exact slot is selected again, so we warn about it.
+  const orphanedOverrides = useMemo(() => {
+    const validKeys = new Set(
+      moduleSelections.map((s) =>
+        overrideKey(s.moduleCode || s.module_code, s.lessonType || s.lesson_type, s.classNo || s.class_no)
+      )
+    );
+
+    return slotOverrides.filter(
+      (o) => !validKeys.has(overrideKey(o.moduleCode, o.lessonType, o.classNo))
+    );
+  }, [slotOverrides, moduleSelections]);
+
+  const handleLogin = async (userId) => {
+    setLoginNotice('');
+    const selectedUser = availableUsers.find((user) => user.id === userId) || {
+      id: userId,
+      name: `User ${userId}`,
+      email: ''
+    };
+
+    await fetch('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ userId })
+    });
+
     window.localStorage.setItem('currentUserId', String(userId));
     setCurrentUserId(userId);
     setCurrentUser({
@@ -481,16 +592,104 @@ export default function App() {
 
   const handleCustomEventClick = (slot) => {
     setSelectedEvent(slot);
+    setEventEditDraft({
+      title: slot.title,
+      day: slot.day,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      color: slot.color
+    });
   };
 
-  const handleDeleteSelectedEvent = () => {
+  const closeEventModal = () => {
+    setSelectedEvent(null);
+    setEventEditDraft(null);
+  };
+
+  const updateEventEditDraft = (field, value) => {
+    setEventEditDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleSaveSelectedEvent = async () => {
+    if (!selectedEvent || !eventEditDraft) {
+      return;
+    }
+
+    const title = eventEditDraft.title.trim();
+    if (!title) {
+      setCustomEventFeedback('Add a title before saving.');
+      return;
+    }
+
+    if (Number(eventEditDraft.endTime) <= Number(eventEditDraft.startTime)) {
+      setCustomEventFeedback('End time must be later than start time.');
+      return;
+    }
+
+    await updateCustomEvent(
+      selectedEvent.id,
+      {
+        title,
+        day: eventEditDraft.day,
+        startTime: eventEditDraft.startTime,
+        endTime: eventEditDraft.endTime,
+        color: eventEditDraft.color
+      },
+      { persist: true }
+    );
+    closeEventModal();
+  };
+
+  const handleDeleteSelectedEvent = async () => {
     if (!selectedEvent) {
       return;
     }
 
-    const updatedEvents = customEvents.filter((event) => event.id !== selectedEvent.id);
-    setCustomEvents(updatedEvents);
-    setSelectedEvent(null);
+    await handleDeleteCustomEvent(selectedEvent.id);
+    closeEventModal();
+  };
+
+  const handleModuleSlotClick = (slot) => {
+    setSelectedModuleSlot(slot);
+    setModuleSlotEditDraft({ label: slot.title, color: slot.color });
+  };
+
+  const closeModuleSlotModal = () => {
+    setSelectedModuleSlot(null);
+    setModuleSlotEditDraft(null);
+  };
+
+  const updateModuleSlotDraft = (field, value) => {
+    setModuleSlotEditDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleSaveModuleSlotOverride = async () => {
+    if (!selectedModuleSlot || !moduleSlotEditDraft) {
+      return;
+    }
+
+    const label = moduleSlotEditDraft.label.trim();
+    await upsertSlotOverride(
+      selectedModuleSlot.moduleCode,
+      selectedModuleSlot.lessonType,
+      selectedModuleSlot.classNo,
+      { label: label || null, color: moduleSlotEditDraft.color },
+      { persist: true }
+    );
+    closeModuleSlotModal();
+  };
+
+  const handleResetModuleSlotOverride = async () => {
+    if (!selectedModuleSlot) {
+      return;
+    }
+
+    await resetSlotOverride(
+      selectedModuleSlot.moduleCode,
+      selectedModuleSlot.lessonType,
+      selectedModuleSlot.classNo
+    );
+    closeModuleSlotModal();
   };
 
   if (!currentUserId) {
@@ -666,7 +865,19 @@ export default function App() {
                 </div>
               )}
             </form>
-            <TimetableGrid slots={mergedSlots} onCustomEventEdit={updateCustomEvent} />
+            {orphanedOverrides.length > 0 && (
+              <div className="override-warning-banner">
+                {orphanedOverrides.length} class customization{orphanedOverrides.length > 1 ? 's' : ''} no
+                longer match your current schedule (the class slot may have changed). They were kept and
+                will reapply automatically if you select that exact class again.
+              </div>
+            )}
+            <TimetableGrid
+              slots={mergedSlots}
+              onCustomEventEdit={updateCustomEvent}
+              onCustomEventClick={handleCustomEventClick}
+              onModuleSlotClick={handleModuleSlotClick}
+            />
             <div className="slots-summary">
               <p>Showing {mergedSlots.length} total slots this week</p>
             </div>
@@ -689,29 +900,132 @@ export default function App() {
         )}
       </main>
 
-      {selectedEvent ? (
-        <div className="event-modal-backdrop" onClick={() => setSelectedEvent(null)}>
+      {selectedEvent && eventEditDraft ? (
+        <div className="event-modal-backdrop" onClick={closeEventModal}>
           <div className="event-modal" onClick={(event) => event.stopPropagation()}>
             <div className="event-modal-header">
               <div>
-                <h3>{selectedEvent.title}</h3>
-                <p>
-                  {selectedEvent.day} {selectedEvent.startTime.slice(0, 2)}:{selectedEvent.startTime.slice(2, 4)}
-                  {' '}–{' '}
-                  {selectedEvent.endTime.slice(0, 2)}:{selectedEvent.endTime.slice(2, 4)}
-                </p>
+                <h3>Edit event</h3>
+                <p>Update the details below, then save.</p>
               </div>
-              <button className="event-modal-close" type="button" onClick={() => setSelectedEvent(null)}>
+              <button className="event-modal-close" type="button" onClick={closeEventModal}>
                 Close
               </button>
+            </div>
+
+            <div className="custom-event-fields">
+              <label className="custom-event-field">
+                <span>Title</span>
+                <input
+                  type="text"
+                  value={eventEditDraft.title}
+                  onChange={(event) => updateEventEditDraft('title', event.target.value)}
+                />
+              </label>
+
+              <label className="custom-event-field">
+                <span>Day</span>
+                <select
+                  value={eventEditDraft.day}
+                  onChange={(event) => updateEventEditDraft('day', event.target.value)}
+                >
+                  {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'].map((day) => (
+                    <option key={day} value={day}>
+                      {day}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="custom-event-field">
+                <span>Start</span>
+                <input
+                  type="time"
+                  step="60"
+                  value={formatTimeForInput(eventEditDraft.startTime)}
+                  onChange={(event) => updateEventEditDraft('startTime', event.target.value.replace(':', ''))}
+                />
+              </label>
+
+              <label className="custom-event-field">
+                <span>End</span>
+                <input
+                  type="time"
+                  step="60"
+                  value={formatTimeForInput(eventEditDraft.endTime)}
+                  onChange={(event) => updateEventEditDraft('endTime', event.target.value.replace(':', ''))}
+                />
+              </label>
+
+              <label className="custom-event-field">
+                <span>Color</span>
+                <input
+                  type="color"
+                  value={eventEditDraft.color}
+                  onChange={(event) => updateEventEditDraft('color', event.target.value)}
+                />
+              </label>
             </div>
 
             <div className="event-modal-actions">
               <button className="event-modal-delete" type="button" onClick={handleDeleteSelectedEvent}>
                 Delete event
               </button>
-              <button className="event-modal-edit" type="button" onClick={() => {}}>
-                Edit event (placeholder)
+              <button className="event-modal-edit" type="button" onClick={handleSaveSelectedEvent}>
+                Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {selectedModuleSlot && moduleSlotEditDraft ? (
+        <div className="event-modal-backdrop" onClick={closeModuleSlotModal}>
+          <div className="event-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="event-modal-header">
+              <div>
+                <h3>Customize class</h3>
+                <p>
+                  {selectedModuleSlot.moduleCode} {selectedModuleSlot.lessonType} — {selectedModuleSlot.day}{' '}
+                  {formatTimeForInput(selectedModuleSlot.startTime)} to {formatTimeForInput(selectedModuleSlot.endTime)}
+                </p>
+              </div>
+              <button className="event-modal-close" type="button" onClick={closeModuleSlotModal}>
+                Close
+              </button>
+            </div>
+
+            <div className="custom-event-fields">
+              <label className="custom-event-field">
+                <span>Display label</span>
+                <input
+                  type="text"
+                  value={moduleSlotEditDraft.label}
+                  onChange={(event) => updateModuleSlotDraft('label', event.target.value)}
+                  placeholder={`${selectedModuleSlot.moduleCode} ${selectedModuleSlot.lessonType}`}
+                />
+              </label>
+
+              <label className="custom-event-field">
+                <span>Color</span>
+                <input
+                  type="color"
+                  value={moduleSlotEditDraft.color}
+                  onChange={(event) => updateModuleSlotDraft('color', event.target.value)}
+                />
+              </label>
+            </div>
+
+            <p className="custom-event-feedback">
+              This only changes how the class looks for you. Day, time, and venue stay tied to NUSMods data.
+            </p>
+
+            <div className="event-modal-actions">
+              <button className="event-modal-delete" type="button" onClick={handleResetModuleSlotOverride}>
+                Reset to default
+              </button>
+              <button className="event-modal-edit" type="button" onClick={handleSaveModuleSlotOverride}>
+                Save changes
               </button>
             </div>
           </div>
