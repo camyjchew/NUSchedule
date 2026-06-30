@@ -172,22 +172,63 @@ export default function App() {
     await updateCustomEvent(eventId, { title: title.trim() }, { persist: true });
   };
 
-  const saveTimetable = async (nextSelections, nextEvents) => {
-    const response = await fetch(`/timetable/update?userId=${currentUserId}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        userId: currentUserId,
-        moduleSelections: nextSelections,
-        customEvents: nextEvents
-      })
-    });
+  const getStoredTimetableKey = (userId) => `orbital-timetable-${userId}`;
 
-    if (!response.ok) {
-      throw new Error('Failed to save timetable');
+  const readStoredTimetable = (userId) => {
+    if (typeof window === 'undefined' || !userId) {
+      return null;
     }
+
+    try {
+      const stored = window.localStorage.getItem(getStoredTimetableKey(userId));
+      return stored ? JSON.parse(stored) : null;
+    } catch (error) {
+      console.error('Error reading saved timetable:', error);
+      return null;
+    }
+  };
+
+  const writeStoredTimetable = (userId, nextSelections, nextEvents) => {
+    if (typeof window === 'undefined' || !userId) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        getStoredTimetableKey(userId),
+        JSON.stringify({
+          moduleSelections: nextSelections,
+          customEvents: nextEvents
+        })
+      );
+    } catch (error) {
+      console.error('Error saving timetable locally:', error);
+    }
+  };
+
+  const saveTimetable = async (nextSelections, nextEvents) => {
+    try {
+      const response = await fetch(`/timetable/update?userId=${currentUserId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          userId: currentUserId,
+          moduleSelections: nextSelections,
+          customEvents: nextEvents
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save timetable');
+      }
+    } catch (error) {
+      console.error('Backend timetable save failed, saving locally:', error);
+    }
+
+    writeStoredTimetable(currentUserId, nextSelections, nextEvents);
   };
 
   const updateCustomEventDraft = (field, value) => {
@@ -387,14 +428,15 @@ export default function App() {
         }
       } catch (error) {
         console.error('Error loading timetable:', error);
-        // Fall back to dummy data on error
-        setModuleSelections([
+
+        const storedTimetable = readStoredTimetable(currentUserId);
+        const fallbackSelections = storedTimetable?.moduleSelections || [
           { moduleCode: 'CS2030S', lessonType: 'Lecture', classNo: '1' },
           { moduleCode: 'CS2030S', lessonType: 'Tutorial', classNo: '04' },
           { moduleCode: 'MA2001', lessonType: 'Lecture', classNo: '1' },
           { moduleCode: 'MA2001', lessonType: 'Tutorial', classNo: '01' }
-        ]);
-        const fallbackEvents = sortCustomEvents([
+        ];
+        const fallbackEvents = sortCustomEvents(storedTimetable?.customEvents || [
           {
             id: 'custom-1',
             title: 'Gym',
@@ -404,7 +446,10 @@ export default function App() {
             color: '#34d399'
           }
         ]);
+
+        setModuleSelections(fallbackSelections);
         setCustomEvents(fallbackEvents);
+        moduleSelectionsRef.current = fallbackSelections;
         customEventsRef.current = fallbackEvents;
       } finally {
         setLoading(false);
@@ -428,15 +473,33 @@ export default function App() {
     customEventsRef.current = customEvents;
   }, [customEvents]);
 
-  const handleLogin = (userId) => {
+  const handleLogin = async (userId) => {
+    const selectedUser = availableUsers.find((user) => user.id === userId);
+
+    try {
+      const response = await fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ userId })
+      });
+
+      if (!response.ok) {
+        console.error('Session login failed:', await response.text());
+      }
+    } catch (error) {
+      console.error('Session login failed:', error);
+    }
+
     window.localStorage.setItem('currentUserId', String(userId));
     setCurrentUserId(userId);
     setCurrentUser({
-      userId: selectedUser.id,
-      name: selectedUser.name,
-      email: selectedUser.email
+      userId,
+      name: selectedUser?.name || `User ${userId}`,
+      email: selectedUser?.email || ''
     });
     setView('personal');
+    setLoginNotice('');
   };
 
   const handleRegister = async (name, email) => {
@@ -488,8 +551,7 @@ export default function App() {
       return;
     }
 
-    const updatedEvents = customEvents.filter((event) => event.id !== selectedEvent.id);
-    setCustomEvents(updatedEvents);
+    handleDeleteCustomEvent(selectedEvent.id);
     setSelectedEvent(null);
   };
 
