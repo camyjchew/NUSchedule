@@ -71,8 +71,9 @@ def update_timetable():
         return jsonify({"error": "Unauthorized"}), 401
     module_selections = body.get("moduleSelections", [])
     custom_events = body.get("customEvents", [])
+    slot_overrides = body.get("slotOverrides", [])
 
-    update_user_timetable(user_id, module_selections, custom_events)
+    update_user_timetable(user_id, module_selections, custom_events, slot_overrides)
     return jsonify({"status": "success"})
 
 
