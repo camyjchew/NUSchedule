@@ -217,47 +217,58 @@ def get_user_timetable(user_id):
     }
 
 
-def update_user_timetable(user_id, module_selections, custom_events, slot_overrides=None):
-    """Update a user's timetable entries, custom events, and slot overrides."""
-    slot_overrides = slot_overrides or []
+def pick_value(record, *keys, default=None):
+    """Read the first present value from a dict-like object."""
+    for key in keys:
+        if key in record and record[key] is not None:
+            return record[key]
+
+    return default
+
+
+def update_user_timetable(user_id, module_selections, custom_events):
+    """Update a user's timetable entries and custom events."""
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Delete existing entries
-    cursor.execute("DELETE FROM timetable_entries WHERE user_id = ?", (user_id,))
-    cursor.execute("DELETE FROM custom_events WHERE user_id = ?", (user_id,))
-    cursor.execute("DELETE FROM slot_overrides WHERE user_id = ?", (user_id,))
+    try:
+        # Delete existing entries
+        cursor.execute("DELETE FROM timetable_entries WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM custom_events WHERE user_id = ?", (user_id,))
 
-    # Insert new module selections
-    for entry in module_selections:
-        cursor.execute(
-            "INSERT INTO timetable_entries (user_id, module_code, lesson_type, class_no) VALUES (?, ?, ?, ?)",
-            (user_id, entry["moduleCode"], entry["lessonType"], entry["classNo"])
-        )
-
-    # Insert new custom events
-    for event in custom_events:
-        cursor.execute(
-            "INSERT INTO custom_events (id, user_id, title, day, start_time, end_time, color) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (event["id"], user_id, event["title"], event["day"], event["startTime"], event["endTime"], event["color"])
-        )
-
-    # Insert slot overrides
-    for override in slot_overrides:
-        cursor.execute(
-            "INSERT INTO slot_overrides (user_id, module_code, lesson_type, class_no, color, label) VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                user_id,
-                override["moduleCode"],
-                override["lessonType"],
-                override["classNo"],
-                override.get("color"),
-                override.get("label")
+        # Insert new module selections
+        for entry in module_selections:
+            cursor.execute(
+                "INSERT INTO timetable_entries (user_id, module_code, lesson_type, class_no) VALUES (?, ?, ?, ?)",
+                (
+                    user_id,
+                    pick_value(entry, "moduleCode", "module_code"),
+                    pick_value(entry, "lessonType", "lesson_type"),
+                    pick_value(entry, "classNo", "class_no")
+                )
             )
-        )
 
-    conn.commit()
-    conn.close()
+        # Insert new custom events
+        for event in custom_events:
+            cursor.execute(
+                "INSERT INTO custom_events (id, user_id, title, day, start_time, end_time, color) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    pick_value(event, "id"),
+                    user_id,
+                    pick_value(event, "title"),
+                    pick_value(event, "day"),
+                    pick_value(event, "startTime", "start_time"),
+                    pick_value(event, "endTime", "end_time"),
+                    pick_value(event, "color", default="#60a5fa")
+                )
+            )
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def create_group(name, member_ids):
