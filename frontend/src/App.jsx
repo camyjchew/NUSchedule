@@ -200,9 +200,14 @@ export default function App() {
       })
     });
 
-    if (!response.ok) {
-      throw new Error('Failed to save timetable');
+      if (!response.ok) {
+        throw new Error('Failed to save timetable');
+      }
+    } catch (error) {
+      console.error('Backend timetable save failed, saving locally:', error);
     }
+
+    writeStoredTimetable(currentUserId, nextSelections, nextEvents);
   };
 
   const upsertSlotOverride = async (moduleCode, lessonType, classNo, updates, options = {}) => {
@@ -464,14 +469,15 @@ export default function App() {
         }
       } catch (error) {
         console.error('Error loading timetable:', error);
-        // Fall back to dummy data on error
-        setModuleSelections([
+
+        const storedTimetable = readStoredTimetable(currentUserId);
+        const fallbackSelections = storedTimetable?.moduleSelections || [
           { moduleCode: 'CS2030S', lessonType: 'Lecture', classNo: '1' },
           { moduleCode: 'CS2030S', lessonType: 'Tutorial', classNo: '04' },
           { moduleCode: 'MA2001', lessonType: 'Lecture', classNo: '1' },
           { moduleCode: 'MA2001', lessonType: 'Tutorial', classNo: '01' }
-        ]);
-        const fallbackEvents = sortCustomEvents([
+        ];
+        const fallbackEvents = sortCustomEvents(storedTimetable?.customEvents || [
           {
             id: 'custom-1',
             title: 'Gym',
@@ -481,7 +487,10 @@ export default function App() {
             color: '#34d399'
           }
         ]);
+
+        setModuleSelections(fallbackSelections);
         setCustomEvents(fallbackEvents);
+        moduleSelectionsRef.current = fallbackSelections;
         customEventsRef.current = fallbackEvents;
       } finally {
         setLoading(false);
@@ -543,11 +552,12 @@ export default function App() {
     window.localStorage.setItem('currentUserId', String(userId));
     setCurrentUserId(userId);
     setCurrentUser({
-      userId: selectedUser.id,
-      name: selectedUser.name,
-      email: selectedUser.email
+      userId,
+      name: selectedUser?.name || `User ${userId}`,
+      email: selectedUser?.email || ''
     });
     setView('personal');
+    setLoginNotice('');
   };
 
   const handleRegister = async (name, email) => {
