@@ -226,15 +226,17 @@ def pick_value(record, *keys, default=None):
     return default
 
 
-def update_user_timetable(user_id, module_selections, custom_events):
-    """Update a user's timetable entries and custom events."""
+def update_user_timetable(user_id, module_selections, custom_events, slot_overrides=None):
+    """Update a user's timetable entries, custom events, and slot overrides."""
     conn = get_connection()
     cursor = conn.cursor()
+    slot_overrides = slot_overrides or []
 
     try:
         # Delete existing entries
         cursor.execute("DELETE FROM timetable_entries WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM custom_events WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM slot_overrides WHERE user_id = ?", (user_id,))
 
         # Insert new module selections
         for entry in module_selections:
@@ -260,6 +262,19 @@ def update_user_timetable(user_id, module_selections, custom_events):
                     pick_value(event, "startTime", "start_time"),
                     pick_value(event, "endTime", "end_time"),
                     pick_value(event, "color", default="#60a5fa")
+                )
+            )
+
+        for override in slot_overrides:
+            cursor.execute(
+                "INSERT INTO slot_overrides (user_id, module_code, lesson_type, class_no, color, label) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    user_id,
+                    pick_value(override, "moduleCode", "module_code"),
+                    pick_value(override, "lessonType", "lesson_type"),
+                    pick_value(override, "classNo", "class_no"),
+                    pick_value(override, "color"),
+                    pick_value(override, "label")
                 )
             )
 
